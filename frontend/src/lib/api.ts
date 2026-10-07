@@ -1,16 +1,20 @@
 import type {
   AppSettings,
   Book,
+  Bookmark,
   ChapterDetail,
   Collection,
   EngineInfo,
   Facets,
+  FindReplaceRequest,
+  FindReplaceResult,
   Job,
   JobDetail,
   KokoroModel,
   LexiconRule,
   Metadata,
   MetadataResult,
+  NameSuggestion,
   PiperCatalogVoice,
   ProjectDetail,
   ProjectSummary,
@@ -145,6 +149,8 @@ export const api = {
   projectCoverFromUrl: (id: number, url: string) => post<ProjectDetail>(`/api/projects/${id}/cover/url`, { url }),
   removeProjectCover: (id: number) => del<ProjectDetail>(`/api/projects/${id}/cover`),
   previewProject: (id: number, text?: string) => audioBlob(`/api/projects/${id}/preview`, { text: text ?? null }),
+  findReplace: (id: number, body: FindReplaceRequest) => post<FindReplaceResult>(`/api/projects/${id}/find-replace`, body),
+  nameSuggestions: (id: number, minCount = 2) => get<NameSuggestion[]>(`/api/projects/${id}/names${qs({ min_count: minCount })}`),
 
   // chapters
   chapter: (projectId: number, chapterId: number) => get<ChapterDetail>(`/api/projects/${projectId}/chapters/${chapterId}`),
@@ -182,6 +188,12 @@ export const api = {
   },
   bookCoverFromUrl: (id: number, url: string) => post<Book>(`/api/books/${id}/cover/url`, { url }),
   retagBook: (id: number) => post<Job>(`/api/books/${id}/retag`),
+  bookmarks: (bookId: number) => get<Bookmark[]>(`/api/books/${bookId}/bookmarks`),
+  createBookmark: (bookId: number, body: { position: number; title?: string; note?: string }) =>
+    post<Bookmark>(`/api/books/${bookId}/bookmarks`, body),
+  updateBookmark: (id: number, body: { title?: string; note?: string; position?: number }) =>
+    patch<Bookmark>(`/api/bookmarks/${id}`, body),
+  deleteBookmark: (id: number) => del<{ ok: boolean }>(`/api/bookmarks/${id}`),
   templates: () => get<TemplateInfo>("/api/library/templates"),
   templatePreview: (template: string) => post<{ template: string; examples: string[] }>("/api/library/template-preview", { template }),
   organizePreview: (template?: string) =>
@@ -245,6 +257,8 @@ export const api = {
   metadataDescription: (source: string, sourceId: string) =>
     get<{ description: string }>(`/api/metadata/description${qs({ source, source_id: sourceId })}`),
 };
+
+export const BACKUP_URL = "/api/system/backup";
 
 export function fileUrl(bookId: number, index: number) {
   return `/api/books/${bookId}/files/${index}`;

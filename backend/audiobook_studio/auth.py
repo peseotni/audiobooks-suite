@@ -8,6 +8,7 @@ import hmac
 import json
 import re
 import secrets
+import threading
 import time
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs
@@ -84,6 +85,47 @@ def valid_session(token: str | None) -> bool:
 def valid_feed_token(token: str | None) -> bool:
     expected = settings_store.current().feed_token
     return bool(token and expected) and hmac.compare_digest(token, expected)
+
+
+class LoginLimiter:
+    """Slows down password guessing: after ``attempts`` failures within
+    ``window`` seconds a client has to wait until the window has passed."""
+
+    def __init__(self, attempts: int = 5, window: float = 300.0):
+        self.attempts = attempts
+        self.window = window
+        self._failures: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def _recent(self, client: str, now: float) -> list[float]:
+        recent = [t for t in self._failures.get(client, []) if now - t < self.window]
+        if recent:
+            self._failures[client] = recent
+        else:
+            self._failures.pop(client, None)
+        return recent
+
+    def retry_after(self, client: str) -> int:
+        now = time.monotonic()
+        with self._lock:
+            recent = self._recent(client, now)
+            if len(recent) < self.attempts:
+                return 0
+            return max(1, int(recent[-self.attempts] + self.window - now) + 1)
+
+    def failed(self, client: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._failures[client] = self._recent(client, now) + [now]
+            if len(self._failures) > 10_000:  # bound memory under a flood of clients
+                self._failures.pop(next(iter(self._failures)))
+
+    def reset(self, client: str) -> None:
+        with self._lock:
+            self._failures.pop(client, None)
+
+
+login_limiter = LoginLimiter()
 
 
 def _cookie(scope) -> str | None:

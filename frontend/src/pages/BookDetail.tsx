@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { BookmarksCard } from "../components/BookmarksCard";
 import { CoverEditor } from "../components/CoverEditor";
 import { useFeedback } from "../components/feedback";
 import { MetadataForm, type MetadataValue } from "../components/MetadataForm";
@@ -372,6 +373,7 @@ export default function BookDetail() {
               )}
             </Card>
           </div>
+          <BookmarksCard book={book} />
         </div>
       </div>
 

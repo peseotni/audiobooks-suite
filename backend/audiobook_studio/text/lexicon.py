@@ -100,6 +100,10 @@ class Lexicon:
     def fingerprint(self) -> str:
         return self._fingerprint
 
+    def covers(self, word: str) -> bool:
+        """True when an enabled rule already matches ``word``."""
+        return any(pattern.search(word) for pattern, _rule in self._compiled)
+
 
 def _match_case(original: str, replacement: str) -> str:
     """Keep the capitalisation of sentence starts ("Hermione" -> "Her-my-oh-nee")."""

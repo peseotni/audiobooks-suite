@@ -1,4 +1,5 @@
 import {
+  BookmarkPlus,
   ChevronDown,
   ListMusic,
   Loader2,
@@ -141,6 +142,9 @@ export function PlayerBar() {
               ))
             }
           </Menu>
+          <IconButton label="Add bookmark (B)" onClick={player.addBookmark}>
+            <BookmarkPlus className="size-4" />
+          </IconButton>
           <Menu
             align="right"
             trigger={({ onClick }) => (

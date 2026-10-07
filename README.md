@@ -26,6 +26,8 @@ LXD/Incus), no cloud account required.
 - Title, author, series, description, ISBN, language and **cover art** are taken from the file.
 - **Studio editor**: include/skip, rename, edit, split, merge, reorder and add chapters; preview any
   chapter or selection with the chosen voice before rendering.
+- **Find & replace** across all (or the selected) chapters, with preview and regular expressions – handy
+  for OCR errors and spelling fixes.
 - **Voices** (mix and match per book or even per chapter):
   - **Kokoro** – 82M parameter neural model, very natural, runs offline on the CPU (English US/UK,
     Spanish, French, Italian, Portuguese, Hindi, Japanese, Chinese). Includes a **voice blender**.
@@ -35,6 +37,8 @@ LXD/Incus), no cloud account required.
   - **Any OpenAI-compatible speech API** – OpenAI, or your own GPU server running Kokoro-FastAPI,
     openedai-speech, AllTalk, LocalAI …
 - **Dialogue voice**: text in quotation marks can be read by a second voice.
+- **Name finder**: lists the names and invented words of a book that have no pronunciation rule yet –
+  listen to each one and add a phonetic spelling in one click.
 - **Pronunciation dictionary** (global and per book, plain text or regular expressions) plus automatic
   clean-up: abbreviations (Mr. → Mister), footnote markers, URLs, dashes, roman numerals in headings.
 - Speed, pauses between sentences/paragraphs/scenes/chapters, chapter title announcements.
@@ -57,9 +61,12 @@ LXD/Incus), no cloud account required.
 - **Import existing audiobooks** (M4B, M4A, MP3, Opus, FLAC): tags, embedded chapters and covers are read.
 - **Online metadata lookup** (Open Library and Google Books) for descriptions, genres and covers.
 - Built-in **player**: multi-file books, chapter list, ±15/30 s, speed, sleep timer, remembers your
-  position, lock-screen/media-key controls.
+  position, lock-screen/media-key controls, **bookmarks with notes** and keyboard shortcuts
+  (<kbd>Space</kbd>/<kbd>K</kbd> play/pause, <kbd>←</kbd>/<kbd>→</kbd> −15/+30 s, <kbd>Shift</kbd>+<kbd>←</kbd>/<kbd>→</kbd>
+  previous/next chapter, <kbd>B</kbd> bookmark).
 - **Podcast feeds** for the whole library and for every book – listen on your phone with any podcast app.
-- Optional **password protection**, dark mode, works on phones, REST API with docs at `/api/docs`.
+- **Database backup** download under *Settings → System*.
+- Optional **password protection** (with brute-force protection on the login), dark mode, works on phones, REST API with docs at `/api/docs`.
 
 ## Quick start with Docker
 

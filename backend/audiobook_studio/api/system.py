@@ -6,11 +6,15 @@ import os
 import platform
 import secrets
 import shutil
+import sqlite3
 import subprocess
+import tempfile
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from fastapi.responses import Response as RawResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -46,8 +50,15 @@ def auth_status(request: Request):
 def login(body: LoginRequest, response: Response, request: Request):
     if not auth.auth_enabled():
         return {"ok": True}
+    client = request.client.host if request.client else "unknown"
+    wait = auth.login_limiter.retry_after(client)
+    if wait:
+        raise HTTPException(429, f"Too many failed attempts. Try again in {wait} seconds.",
+                            headers={"Retry-After": str(wait)})
     if not auth.check_password(body.password):
+        auth.login_limiter.failed(client)
         raise HTTPException(401, "Wrong password")
+    auth.login_limiter.reset(client)
     secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie(auth.COOKIE, auth.create_session_token(), max_age=auth.SESSION_DAYS * 86400,
                         httponly=True, samesite="lax", secure=secure)
@@ -197,6 +208,26 @@ def stats(session: Session = Depends(get_db)):
         "recently_added": [book_out(b) for b in recent],
         "recent_projects": [project_summary(p) for p in recent_projects],
     }
+
+
+@router.get("/api/system/backup")
+def backup_database(background: BackgroundTasks):
+    """Consistent copy of the database (settings, library, projects, rules)."""
+    config = get_config()
+    tmp = tempfile.NamedTemporaryFile(prefix="backup-", suffix=".db", dir=config.tmp_path, delete=False)
+    tmp.close()
+    source = sqlite3.connect(config.db_path)
+    target = sqlite3.connect(tmp.name)
+    try:
+        with target:
+            source.backup(target)
+        target.execute("PRAGMA journal_mode=DELETE")  # one self-contained file
+    finally:
+        target.close()
+        source.close()
+    background.add_task(Path(tmp.name).unlink, missing_ok=True)
+    name = f"audiobook-studio-{datetime.now():%Y%m%d-%H%M%S}.db"
+    return FileResponse(tmp.name, filename=name, media_type="application/vnd.sqlite3")
 
 
 # ------------------------------------------------------------------- metadata

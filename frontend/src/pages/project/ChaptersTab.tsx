@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Replace,
   Square,
   Trash2,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { usePreviewPlayer } from "../../lib/hooks";
 import type { Chapter, ProjectDetail } from "../../lib/types";
 import { ChapterEditor } from "./ChapterEditor";
 import { ChapterVoiceModal } from "./ChapterVoiceModal";
+import { FindReplaceModal } from "./FindReplaceModal";
 
 function AudioState({ chapter }: { chapter: Chapter }) {
   if (chapter.status === "rendering") return <Badge color="brand" icon={<Loader2 className="size-3 animate-spin" />}>Narrating</Badge>;
@@ -44,6 +46,7 @@ export function ChaptersTab({ project, onChange }: { project: ProjectDetail; onC
   const [newChapter, setNewChapter] = useState({ title: "", text: "" });
   const [playingRendered, setPlayingRendered] = useState<number | null>(null);
   const [voiceFor, setVoiceFor] = useState<number[]>([]);
+  const [findOpen, setFindOpen] = useState(false);
   const locked = project.status === "rendering" || project.status === "importing";
   const chapters = project.chapters;
   const included = chapters.filter((c) => c.include);
@@ -121,6 +124,9 @@ export function ChaptersTab({ project, onChange }: { project: ProjectDetail; onC
             </Button>
           </div>
         )}
+        <Button size="sm" icon={<Replace className="size-4" />} onClick={() => setFindOpen(true)}>
+          Find & replace
+        </Button>
         <div className="ml-auto text-sm text-zinc-500 dark:text-zinc-400">
           {included.length} of {chapters.length} chapters · {formatNumber(included.reduce((s, c) => s + c.word_count, 0))} words · ≈{" "}
           {formatDuration(included.reduce((s, c) => s + c.estimated_seconds, 0))}
@@ -266,6 +272,13 @@ export function ChaptersTab({ project, onChange }: { project: ProjectDetail; onC
         </Button>
       </div>
 
+      <FindReplaceModal
+        project={project}
+        open={findOpen}
+        chapterIds={selectedIds}
+        onClose={() => setFindOpen(false)}
+        onApplied={() => onChange()}
+      />
       <ChapterEditor project={project} chapterId={editing} onClose={() => setEditing(null)} onSaved={onChange} />
       <ChapterVoiceModal
         project={project}
