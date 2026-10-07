@@ -139,6 +139,18 @@ class TextProjectCreate(BaseModel):
     text: str = Field(..., min_length=1)
 
 
+class FindReplace(BaseModel):
+    find: str = Field(..., min_length=1, max_length=500)
+    replace: str = Field("", max_length=2000)
+    is_regex: bool = False
+    case_sensitive: bool = False
+    whole_word: bool = False
+    include_titles: bool = False
+    chapter_ids: list[int] | None = None
+    # Only report what would change.
+    dry_run: bool = True
+
+
 class RenderRequest(BaseModel):
     chapter_ids: list[int] | None = None
 
@@ -220,6 +232,27 @@ class BulkBookUpdate(BaseModel):
 class ProgressUpdate(BaseModel):
     position: float = Field(..., ge=0)
     finished: bool | None = None
+
+
+class BookmarkIn(BaseModel):
+    position: float = Field(..., ge=0)
+    title: str = Field("", max_length=300)
+    note: str = Field("", max_length=5000)
+
+
+class BookmarkPatch(BaseModel):
+    position: float | None = Field(None, ge=0)
+    title: str | None = Field(None, max_length=300)
+    note: str | None = Field(None, max_length=5000)
+
+
+class BookmarkOut(ORM):
+    id: int
+    book_id: int
+    position: float
+    title: str
+    note: str
+    created_at: UTCDateTime
 
 
 class CollectionIn(BaseModel):

@@ -328,3 +328,42 @@ export interface TemplateInfo {
   current: string;
   library_path: string;
 }
+
+export interface Bookmark {
+  id: number;
+  book_id: number;
+  position: number;
+  title: string;
+  note: string;
+  created_at: string;
+}
+
+export interface FindReplaceExample {
+  before: string;
+  match: string;
+  replacement: string | null;
+  after: string;
+}
+
+export interface FindReplaceResult {
+  total: number;
+  applied: boolean;
+  chapters: { id: number; position: number; title: string; count: number; examples: FindReplaceExample[] }[];
+}
+
+export interface FindReplaceRequest {
+  find: string;
+  replace: string;
+  is_regex: boolean;
+  case_sensitive: boolean;
+  whole_word: boolean;
+  include_titles: boolean;
+  chapter_ids?: number[] | null;
+  dry_run: boolean;
+}
+
+export interface NameSuggestion {
+  word: string;
+  count: number;
+  example: string;
+}

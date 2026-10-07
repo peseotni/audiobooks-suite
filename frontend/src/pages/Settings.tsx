@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Copy,
   Cpu,
+  DatabaseBackup,
   FolderSearch,
   FolderTree,
   Globe,
@@ -18,7 +19,7 @@ import { useFeedback } from "../components/feedback";
 import { RenderSettingsForm } from "../components/RenderSettingsForm";
 import { SaveBar } from "../components/SaveBar";
 import { Badge, Button, Field, LoadingBlock, Modal, PageHeader, ProgressBar, Section, Select, Switch } from "../components/ui";
-import { api } from "../lib/api";
+import { BACKUP_URL, api } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { useDebounced } from "../lib/hooks";
 import type { AppSettings } from "../lib/types";
@@ -228,6 +229,16 @@ function SystemSection() {
           <ProgressBar value={disk.used / disk.total} color={disk.free / disk.total < 0.1 ? "red" : "brand"} />
         </div>
       )}
+      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+        <a href={BACKUP_URL} download>
+          <Button size="sm" icon={<DatabaseBackup className="size-4" />}>
+            Download database backup
+          </Button>
+        </a>
+        <p className="flex-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Settings, library metadata, bookmarks, projects and pronunciation rules. Audio files and voice models are not included.
+        </p>
+      </div>
     </Section>
   );
 }

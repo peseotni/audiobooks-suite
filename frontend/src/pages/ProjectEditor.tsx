@@ -37,6 +37,7 @@ import { formatBytes, formatDate, formatDuration, formatNumber } from "../lib/fo
 import { usePreviewPlayer } from "../lib/hooks";
 import type { Metadata, ProjectDetail, RenderSettings } from "../lib/types";
 import { ChaptersTab } from "./project/ChaptersTab";
+import { NameSuggestions } from "./project/NameSuggestions";
 
 type Tab = "chapters" | "voice" | "details" | "pronunciation" | "source";
 const ACTIVE = new Set(["importing", "queued", "rendering"]);
@@ -454,6 +455,7 @@ export default function ProjectEditor() {
                   . Changing rules marks affected chapters for re-narration.
                 </p>
                 <RulesTable projectId={project.id} />
+                <NameSuggestions project={project} />
               </div>
               <RuleTester projectId={project.id} onPreview={(text) => api.previewProject(project.id, text)} />
             </div>

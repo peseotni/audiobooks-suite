@@ -21,8 +21,20 @@ from ..library import service as library
 from ..library.covers import CoverError, fetch_cover, thumb_path
 from ..library.feeds import MIME
 from ..library.paths import TEMPLATE_FIELDS, TEMPLATE_PRESETS, author_sort, render_template, resolve_path, template_fields
-from ..models import METADATA_FIELDS, Book, Collection, collection_books, utcnow
-from ..schemas import BookOut, BookUpdate, BulkBookUpdate, CoverUrl, JobOut, OrganizeRequest, ProgressUpdate, ScanRequest
+from ..models import METADATA_FIELDS, Book, Bookmark, Collection, collection_books, utcnow
+from ..schemas import (
+    BookmarkIn,
+    BookmarkOut,
+    BookmarkPatch,
+    BookOut,
+    BookUpdate,
+    BulkBookUpdate,
+    CoverUrl,
+    JobOut,
+    OrganizeRequest,
+    ProgressUpdate,
+    ScanRequest,
+)
 from .common import book_out, get_or_404, job_out
 
 router = APIRouter(prefix="/api", tags=["library"])
@@ -217,6 +229,52 @@ def save_progress(book_id: int, body: ProgressUpdate, session: Session = Depends
         book.finished = True
     session.commit()
     return book_out(book)
+
+
+# ------------------------------------------------------------------- bookmarks
+def _chapter_at(book: Book, position: float) -> str:
+    title = ""
+    for chapter in book.chapters or []:
+        if position >= chapter.get("start", 0) - 0.25:
+            title = chapter.get("title", "")
+    return title
+
+
+@router.get("/books/{book_id}/bookmarks", response_model=list[BookmarkOut])
+def list_bookmarks(book_id: int, session: Session = Depends(get_db)):
+    return get_or_404(session, Book, book_id, "Book").bookmarks
+
+
+@router.post("/books/{book_id}/bookmarks", response_model=BookmarkOut)
+def create_bookmark(book_id: int, body: BookmarkIn, session: Session = Depends(get_db)):
+    book = get_or_404(session, Book, book_id, "Book")
+    position = min(body.position, book.duration) if book.duration else body.position
+    bookmark = Bookmark(book_id=book.id, position=round(position, 2),
+                        title=body.title.strip() or _chapter_at(book, position) or "Bookmark", note=body.note.strip())
+    session.add(bookmark)
+    session.commit()
+    return bookmark
+
+
+@router.patch("/bookmarks/{bookmark_id}", response_model=BookmarkOut)
+def update_bookmark(bookmark_id: int, body: BookmarkPatch, session: Session = Depends(get_db)):
+    bookmark = get_or_404(session, Bookmark, bookmark_id, "Bookmark")
+    changes = body.model_dump(exclude_unset=True)
+    if changes.get("position") is not None:
+        bookmark.position = round(changes["position"], 2)
+    if changes.get("title") is not None:
+        bookmark.title = changes["title"].strip() or bookmark.title
+    if changes.get("note") is not None:
+        bookmark.note = changes["note"].strip()
+    session.commit()
+    return bookmark
+
+
+@router.delete("/bookmarks/{bookmark_id}")
+def delete_bookmark(bookmark_id: int, session: Session = Depends(get_db)):
+    session.delete(get_or_404(session, Bookmark, bookmark_id, "Bookmark"))
+    session.commit()
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------- media

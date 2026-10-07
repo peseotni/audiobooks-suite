@@ -158,6 +158,28 @@ class Book(MetadataMixin, Base):
     collections: Mapped[list[Collection]] = relationship(
         secondary=collection_books, back_populates="books"
     )
+    bookmarks: Mapped[list[Bookmark]] = relationship(
+        back_populates="book",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Bookmark.position",
+    )
+
+
+class Bookmark(Base):
+    """A saved position (with an optional note) in a library book."""
+
+    __tablename__ = "bookmarks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), index=True)
+    # Seconds on the book's global timeline.
+    position: Mapped[float] = mapped_column(Float, default=0.0)
+    title: Mapped[str] = mapped_column(String, default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    book: Mapped[Book] = relationship(back_populates="bookmarks")
 
 
 class Collection(Base):

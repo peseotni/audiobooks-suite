@@ -36,6 +36,7 @@ interface PlayerApi {
   setRate: (rate: number) => void;
   setVolume: (volume: number) => void;
   setSleep: (option: number | "chapter" | null) => void;
+  addBookmark: () => void;
   close: () => void;
 }
 
@@ -237,6 +238,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [chapter],
   );
 
+  const addBookmark = useCallback(() => {
+    const current = bookRef.current;
+    if (!current) return;
+    api
+      .createBookmark(current.id, { position: positionRef.current })
+      .then((bookmark) => {
+        void queryClient.invalidateQueries({ queryKey: ["bookmarks", current.id] });
+        feedback.success(`Bookmark “${bookmark.title}” added`);
+      })
+      .catch(feedback.error);
+  }, [queryClient, feedback]);
+
   const close = useCallback(() => {
     saveProgress();
     const audio = audioRef.current;
@@ -345,6 +358,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("pagehide", handler);
   }, [saveProgress]);
 
+  // Keyboard shortcuts (ignored while typing or when a dialog is open)
+  useEffect(() => {
+    if (!book) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=true], dialog[open]")) return;
+      if (document.querySelector("dialog[open]")) return;
+      switch (event.key) {
+        case " ":
+        case "k":
+          if (event.key === " " && target?.closest("button, a")) return; // let the focused control react
+          toggle();
+          break;
+        case "ArrowLeft":
+          if (event.shiftKey) prevChapter();
+          else skip(-15);
+          break;
+        case "ArrowRight":
+          if (event.shiftKey) nextChapter();
+          else skip(30);
+          break;
+        case "b":
+          addBookmark();
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [book, toggle, skip, prevChapter, nextChapter, addBookmark]);
+
   // Lock screen / media keys
   useEffect(() => {
     if (!("mediaSession" in navigator) || !book) return;
@@ -394,6 +441,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setRate,
     setVolume,
     setSleep,
+    addBookmark,
     close,
   };
   return (

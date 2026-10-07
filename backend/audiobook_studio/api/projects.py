@@ -6,6 +6,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -31,6 +32,7 @@ from ..schemas import (
     ChapterSplit,
     ChapterUpdate,
     CoverUrl,
+    FindReplace,
     JobOut,
     PreviewRequest,
     ProjectDetail,
@@ -42,6 +44,8 @@ from ..schemas import (
 )
 from ..settings_store import RenderSettings
 from ..text.cleanup import clean_for_speech
+from ..text.lexicon import LexiconError, Rule, compile_rule
+from ..text.names import find_names
 from ..tts import TTSError, get_registry
 from .common import (
     active_jobs_by_project,
@@ -266,7 +270,81 @@ def export_text(project_id: int, cleaned: bool = False, session: Session = Depen
             )
         parts += [f"## {chapter.title}", "", text, ""]
     filename = re.sub(r"[^\w.-]+", "_", project.title or "book")[:80] + ".txt"
-    return PlainTextResponse("\n".join(parts), headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    return PlainTextResponse("\n".join(parts), headers={"Content-Disposition": _attachment(filename)})
+
+
+def _attachment(filename: str) -> str:
+    """Content-Disposition that survives non-Latin titles (headers are Latin-1)."""
+    ascii_name = filename.encode("ascii", "ignore").decode().strip("._") or "book.txt"
+    if ascii_name == filename:
+        return f'attachment; filename="{filename}"'
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+
+
+# ------------------------------------------------------------------- text tools
+def _snippet(text: str, start: int, end: int, replacement: str | None) -> dict:
+    before, after = text[max(0, start - 40):start], text[end:end + 40]
+    return {"before": ("…" if start > 40 else "") + before.replace("\n", " "), "match": text[start:end],
+            "replacement": replacement, "after": after.replace("\n", " ") + ("…" if end + 40 < len(text) else "")}
+
+
+@router.post("/{project_id}/find-replace")
+def find_replace(project_id: int, body: FindReplace, session: Session = Depends(get_db)):
+    """Search (and optionally replace) text across the chapters of a project."""
+    project = get_or_404(session, Project, project_id, "Project")
+    if not body.dry_run:
+        _editable(project)
+    try:
+        pattern = compile_rule(Rule(body.find, "", body.is_regex, body.case_sensitive, body.whole_word))
+    except LexiconError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    def substitute(match: re.Match[str]) -> str:
+        return match.expand(body.replace) if body.is_regex else body.replace
+
+    wanted = set(body.chapter_ids) if body.chapter_ids is not None else None
+    results, total = [], 0
+    for chapter in project.chapters:
+        if wanted is not None and chapter.id not in wanted:
+            continue
+        fields = [("text", chapter.text)] + ([("title", chapter.title)] if body.include_titles else [])
+        count, examples = 0, []
+        try:
+            for field, value in fields:
+                matches = list(pattern.finditer(value))
+                count += len(matches)
+                for match in matches[: max(0, 5 - len(examples))]:
+                    examples.append(_snippet(value, match.start(), match.end(), substitute(match)))
+                if matches and not body.dry_run:
+                    new_value = pattern.sub(substitute, value)
+                    if field == "text":
+                        chapter.text = new_value.strip()
+                        chapter.word_count = count_words(chapter.text)
+                    else:
+                        chapter.title = new_value.strip() or chapter.title
+        except (re.error, IndexError) as exc:
+            raise HTTPException(400, f"Invalid replacement: {exc}") from exc
+        if count:
+            total += count
+            results.append({"id": chapter.id, "position": chapter.position, "title": chapter.title,
+                            "count": count, "examples": examples})
+    if not body.dry_run and total:
+        session.commit()
+    return {"total": total, "chapters": results, "applied": not body.dry_run and total > 0}
+
+
+@router.get("/{project_id}/names")
+def name_suggestions(project_id: int, min_count: int = 2, include_covered: bool = False,
+                     session: Session = Depends(get_db)):
+    """Proper nouns of the book that have no pronunciation rule yet."""
+    project = get_or_404(session, Project, project_id, "Project")
+    lexicon = studio.lexicon_for(session, project.id)
+    candidates = find_names(
+        (c.text for c in project.chapters if c.include),
+        min_count=max(1, min_count),
+        exclude=None if include_covered else lexicon.covers,
+    )
+    return [{"word": c.word, "count": c.count, "example": c.example} for c in candidates]
 
 
 # ------------------------------------------------------------------- cover

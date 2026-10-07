@@ -342,3 +342,80 @@ def test_inbox(client, data_dir, run_jobs):
     run_jobs()
     projects = client.get("/api/projects").json()
     assert any(p["source_filename"] == "dropped.md" and p["status"] == "ready" for p in projects)
+
+
+def test_bookmarks(client, rendered_book):
+    _, book = rendered_book
+    url = f"/api/books/{book['id']}/bookmarks"
+    first = client.post(url, json={"position": 1.5}).json()
+    assert first["title"] == book["chapters"][0]["title"]  # defaults to the chapter at that position
+    second = client.post(url, json={"position": 0.5, "title": "Nice line", "note": "quote this"}).json()
+    assert [b["id"] for b in client.get(url).json()] == [second["id"], first["id"]]  # ordered by position
+    edited = client.patch(f"/api/bookmarks/{first['id']}", json={"note": "  later  "}).json()
+    assert edited["note"] == "later" and edited["title"] == first["title"]
+    assert client.post(url, json={"position": -1}).status_code == 422
+    assert client.delete(f"/api/bookmarks/{second['id']}").json()["ok"]
+    assert [b["id"] for b in client.get(url).json()] == [first["id"]]
+    assert client.get("/api/books/999999/bookmarks").status_code == 404
+
+
+def test_find_replace_and_names(client):
+    text = ("# One\n\nAragorn met Legolas at the gate. Then Aragorn smiled at Legolas.\n\n"
+            "# Two\n\nThe colour was grey. Later Legolas said the colour was fine.")
+    detail = client.post("/api/projects/text", json={"title": "Tools", "text": text}).json()
+    pid = detail["id"]
+
+    preview = client.post(f"/api/projects/{pid}/find-replace", json={"find": "colour", "replace": "color"}).json()
+    assert preview["total"] == 2 and not preview["applied"]
+    assert preview["chapters"][0]["examples"][0]["match"] == "colour"
+    chapter_id = preview["chapters"][0]["id"]
+    assert "colour" in client.get(f"/api/projects/{pid}/chapters/{chapter_id}").json()["text"]
+
+    applied = client.post(f"/api/projects/{pid}/find-replace",
+                          json={"find": "colou?r", "replace": "hue", "is_regex": True, "dry_run": False}).json()
+    assert applied["applied"] and applied["total"] == 2
+    assert "The hue was grey" in client.get(f"/api/projects/{pid}/chapters/{chapter_id}").json()["text"]
+    regex = client.post(f"/api/projects/{pid}/find-replace",
+                        json={"find": r"(\w+) smiled", "replace": r"\1 grinned", "is_regex": True}).json()
+    assert regex["chapters"][0]["examples"][0]["replacement"] == "Aragorn grinned"
+    assert client.post(f"/api/projects/{pid}/find-replace", json={"find": "(", "is_regex": True}).status_code == 400
+
+    names = {n["word"]: n["count"] for n in client.get(f"/api/projects/{pid}/names").json()}
+    assert names == {"Aragorn": 2, "Legolas": 3}
+    rule = client.post("/api/lexicon", json={"pattern": "Legolas", "replacement": "Leg-o-las", "project_id": pid}).json()
+    assert [n["word"] for n in client.get(f"/api/projects/{pid}/names").json()] == ["Aragorn"]
+    client.delete(f"/api/lexicon/{rule['id']}")
+    client.delete(f"/api/projects/{pid}")
+
+
+def test_export_text_with_non_latin_title(client):
+    detail = client.post("/api/projects/text", json={"title": "三体 Problem", "text": "Some text here."}).json()
+    response = client.get(f"/api/projects/{detail['id']}/export.txt")
+    assert response.status_code == 200
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
+    client.delete(f"/api/projects/{detail['id']}")
+
+
+def test_database_backup(client, rendered_book):
+    import sqlite3
+
+    response = client.get("/api/system/backup")
+    assert response.status_code == 200
+    assert response.content.startswith(b"SQLite format 3")
+    assert "attachment" in response.headers["content-disposition"]
+    with sqlite3.connect(":memory:") as db:
+        db.deserialize(response.content)
+        assert db.execute("SELECT COUNT(*) FROM books").fetchone()[0] >= 1
+
+
+def test_login_limiter():
+    from audiobook_studio.auth import LoginLimiter
+
+    limiter = LoginLimiter(attempts=3, window=60)
+    for _ in range(3):
+        assert limiter.retry_after("a") == 0
+        limiter.failed("a")
+    assert 0 < limiter.retry_after("a") <= 61
+    assert limiter.retry_after("b") == 0
+    limiter.reset("a")
+    assert limiter.retry_after("a") == 0
